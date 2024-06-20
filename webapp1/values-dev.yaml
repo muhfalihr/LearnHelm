@@ -1,0 +1,5 @@
+namespace: dev
+
+configMap:
+  data:
+    CUSTOM_HEADER: "Welcome to Dev!"

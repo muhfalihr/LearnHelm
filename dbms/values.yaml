@@ -1,0 +1,124 @@
+imagePullSecrets:
+#  - name: harbor-secret
+
+mysql:
+  enabled: true
+  replica: 1
+  image: mysql
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+  env:
+    MYSQL_ROOT_PASSWORD: rahasia2024
+    MYSQL_DATABASE: mysql_db
+    MYSQL_USER: muhfalihr
+    MYSQL_PASSWORD: rahasia2024
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    existingClaim: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    subPath: data
+
+postgres:
+  enabled: true
+  replica: 1
+  image: postgres
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+  env:
+    POSTGRES_PASSWORD: rahasia2024
+    POSTGRES_USER: muhfalihr
+    POSTGRES_DB: postgres_db
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    existingClaim: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    subPath: data
+
+redis:
+  enabled: true
+  replica: 1
+  image: redis
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    existingClaim: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    subPath: data
+
+mongodb:
+  enabled: true
+  replica: 1
+  image: mongo
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+  env:
+    MONGO_INITDB_ROOT_USERNAME: muhfalihr
+    MONGO_INITDB_ROOT_PASSWORD: rahasia2024
+    MONGO_INITDB_DATABASE: muhfalihr
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    existingClaim: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    subPath: data
+
+service:
+  mysql:
+    external:
+      enabled: true
+      port: 13306
+      externalIPs:
+        - 10.100.1.171
+  postgres:
+    external:
+      enabled: true
+      port: 15432
+      externalIPs:
+        - 10.100.1.171
+  redis:
+    external:
+      enabled: true
+      port: 16379
+      externalIPs:
+        - 10.100.1.171
+  mongodb:
+    external:
+      enabled: true
+      port: 27017
+      externalIPs:
+        - 10.100.1.171
+
+resources:
+  mysql:
+    requests:
+      cpu: 512m
+      memory: 512Mi
+  postgres:
+    limits:
+      cpu: 1024m
+      memory: 1024Mi
+    requests:
+      cpu: 256m
+      memory: 256Mi
+  redis:
+    limits:
+      cpu: 1024m
+      memory: 1024Mi
+    requests:
+      cpu: 128m
+      memory: 128Mi
+  mongodb:
+    limits:
+      cpu: 1024m
+      memory: 1024Mi
+    requests:
+      cpu: 256m
+      memory: 256Mi

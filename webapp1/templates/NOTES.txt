@@ -1,0 +1,1 @@
+kubectl port-forward service/{{ .Values.appName }} -n {{ .Values.namespace }} --address 10.100.1.172 8989:80
