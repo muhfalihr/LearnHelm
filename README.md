@@ -21,7 +21,7 @@ helm upgrade mywebapp-release webapp1/ --values mywebapp/values.yaml
 
 # Accessing it
 ```
-minikube tunnel
+kubectl port-forward service/myhelmapp -n default --address <address> 8989:80
 ```
 
 # Create dev/prod
