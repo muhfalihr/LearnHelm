@@ -1,0 +1,109 @@
+{{- if .Values.mysql.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-mysql-secret
+stringData:
+  {{- toYaml .Values.environments.mysql | nindent 2 }}
+{{- end }}
+
+---
+
+{{- if .Values.mysql.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mysql
+  labels:
+    {{- include "mysql.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.mysql.replica }}
+  selector:
+    matchLabels:
+      {{- include "mysql.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mysql.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Release.Name }}-mysql
+          image: {{ .Values.mysql.image | default "mysql" }}:{{ .Values.mysql.imageTag | default "latest" }}
+          imagePullPolicy: {{ .Values.mysql.imagePullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-mysql-secret
+          ports:
+            - containerPort: 3306
+          livenessProbe:
+            initialDelaySeconds: 240
+            tcpSocket:
+              port: 3306
+          readinessProbe:
+            initialDelaySeconds: 60
+            tcpSocket:
+              port: 3306
+          resources:
+            {{- toYaml .Values.resources.mysql | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+              subPath: {{ .Values.persistentStorage.mysql.subPath }}
+      {{- if not .Values.persistentStorage.mysql.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- else if .Values.persistentStorage.mysql.existingClaim }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistentStorage.mysql.existingClaim }}
+      {{- end -}}
+  {{- if and .Values.persistentStorage.mysql.enabled (not .Values.persistentStorage.mysql.existingClaim) }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "mysql.labels" . | nindent 8 }}
+    spec:
+      accessModes: [{{ .Values.persistentStorage.mysql.accessMode }}]
+      {{- if .Values.persistentStorage.mysql.storageClass }}
+      {{- if (eq "-" .Values.persistentStorage.mysql.storageClass) }}
+      storageClassName: ""
+      {{- else }}
+      storageClassName: "{{ .Values.persistentStorage.mysql.storageClass }}"
+      {{- end }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistentStorage.mysql.size | quote }}
+  {{- end }}
+{{- end }}
+
+---
+
+{{- if .Values.mysql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mysql-service
+  labels:
+    {{- include "mysql.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.mysql.external.port }}
+      targetPort: 3306
+      protocol: TCP
+      name: mysql
+  {{- if .Values.service.mysql.external.enabled }}
+  externalIPs:
+    {{- toYaml .Values.service.mysql.external.externalIPs | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "mysql.labels" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,109 @@
+{{- if .Values.mongodb.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-mongodb-secret
+stringData:
+  {{- toYaml .Values.environments.mongodb | nindent 2 }}
+{{- end }}
+
+---
+
+{{- if .Values.mongodb.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mongodb
+  labels:
+    {{- include "mongodb.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.mongodb.replica }}
+  selector:
+    matchLabels:
+      {{- include "mongodb.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mongodb.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Release.Name }}-mongodb
+          image: {{ .Values.mongodb.image | default "mongodb" }}:{{ .Values.mongodb.imageTag | default "latest" }}
+          imagePullPolicy: {{ .Values.mongodb.imagePullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-mongodb-secret
+          ports:
+            - containerPort: 27017
+          livenessProbe:
+            initialDelaySeconds: 60
+            tcpSocket:
+              port: 27017
+          readinessProbe:
+            initialDelaySeconds: 60
+            tcpSocket:
+              port: 27017
+          resources:
+            {{- toYaml .Values.resources.mongodb | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+              subPath: {{ .Values.persistentStorage.mongodb.subPath }}
+      {{- if not .Values.persistentStorage.mongodb.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- else if .Values.persistentStorage.mongodb.existingClaim }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistentStorage.mongodb.existingClaim }}
+      {{- end -}}
+  {{- if and .Values.persistentStorage.mongodb.enabled (not .Values.persistentStorage.mongodb.existingClaim) }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "mongodb.labels" . | nindent 8 }}
+    spec:
+      accessModes: [{{ .Values.persistentStorage.mongodb.accessMode }}]
+      {{- if .Values.persistentStorage.mongodb.storageClass }}
+      {{- if (eq "-" .Values.persistentStorage.mongodb.storageClass) }}
+      storageClassName: ""
+      {{- else }}
+      storageClassName: "{{ .Values.persistentStorage.mongodb.storageClass }}"
+      {{- end }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistentStorage.mongodb.size | quote }}
+  {{- end }}
+{{- end }}
+
+---
+
+{{- if .Values.mongodb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb-service
+  labels:
+    {{- include "mongodb.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.mongodb.external.port }}
+      targetPort: 27017
+      protocol: TCP
+      name: mongodb
+  {{- if .Values.service.mongodb.external.enabled }}
+  externalIPs:
+    {{- toYaml .Values.service.mongodb.external.externalIPs | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "mongodb.labels" . | nindent 4 }}
+{{- end }}

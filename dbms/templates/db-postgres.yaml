@@ -1,0 +1,109 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-postgres-secret
+stringData:
+  {{- toYaml .Values.environments.postgres | nindent 2 }}
+{{- end }}
+
+---
+
+{{- if .Values.postgres.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels:
+    {{- include "postgres.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.postgres.replica }}
+  selector:
+    matchLabels:
+      {{- include "postgres.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "postgres.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Release.Name }}-postgres
+          image: {{ .Values.postgres.image | default "postgres" }}:{{ .Values.postgres.imageTag | default "latest" }}
+          imagePullPolicy: {{ .Values.postgres.imagePullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-postgres-secret
+          ports:
+            - containerPort: 5432
+          livenessProbe:
+            initialDelaySeconds: 60
+            tcpSocket:
+              port: 5432
+          readinessProbe:
+            initialDelaySeconds: 60
+            tcpSocket:
+              port: 5432
+          resources:
+            {{- toYaml .Values.resources.postgres | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgres/data
+              subPath: {{ .Values.persistentStorage.postgres.subPath }}
+      {{- if not .Values.persistentStorage.postgres.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- else if .Values.persistentStorage.postgres.existingClaim }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistentStorage.postgres.existingClaim }}
+      {{- end -}}
+  {{- if and .Values.persistentStorage.postgres.enabled (not .Values.persistentStorage.postgres.existingClaim) }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "postgres.labels" . | nindent 8 }}
+    spec:
+      accessModes: [{{ .Values.persistentStorage.postgres.accessMode }}]
+      {{- if .Values.persistentStorage.postgres.storageClass }}
+      {{- if (eq "-" .Values.persistentStorage.postgres.storageClass) }}
+      storageClassName: ""
+      {{- else }}
+      storageClassName: "{{ .Values.persistentStorage.postgres.storageClass }}"
+      {{- end }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistentStorage.postgres.size | quote }}
+  {{- end }}
+{{- end }}
+
+---
+
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres-service
+  labels:
+    {{- include "postgres.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.postgres.external.port }}
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  {{- if .Values.service.postgres.external.enabled }}
+  externalIPs:
+    {{- toYaml .Values.service.postgres.external.externalIPs | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "postgres.labels" . | nindent 4 }}
+{{- end }}

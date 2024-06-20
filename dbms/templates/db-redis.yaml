@@ -1,0 +1,109 @@
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-redis-secret
+stringData:
+  {{- toYaml .Values.environments.redis | nindent 2 }}
+{{- end }}
+
+---
+
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-redis
+  labels:
+    {{- include "redis.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.redis.replica }}
+  selector:
+    matchLabels:
+      {{- include "redis.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "redis.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Release.Name }}-redis
+          image: {{ .Values.redis.image | default "redis" }}:{{ .Values.redis.imageTag | default "latest" }}
+          imagePullPolicy: {{ .Values.redis.imagePullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-redis-secret
+          ports:
+            - containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 15
+            tcpSocket:
+              port: 6379
+          readinessProbe:
+            initialDelaySeconds: 15
+            tcpSocket:
+              port: 6379
+          resources:
+            {{- toYaml .Values.resources.redis | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              subPath: {{ .Values.persistentStorage.redis.subPath }}
+      {{- if not .Values.persistentStorage.redis.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- else if .Values.persistentStorage.redis.existingClaim }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistentStorage.redis.existingClaim }}
+      {{- end -}}
+  {{- if and .Values.persistentStorage.redis.enabled (not .Values.persistentStorage.redis.existingClaim) }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "redis.labels" . | nindent 8 }}
+    spec:
+      accessModes: [{{ .Values.persistentStorage.redis.accessMode }}]
+      {{- if .Values.persistentStorage.redis.storageClass }}
+      {{- if (eq "-" .Values.persistentStorage.redis.storageClass) }}
+      storageClassName: ""
+      {{- else }}
+      storageClassName: "{{ .Values.persistentStorage.redis.storageClass }}"
+      {{- end }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistentStorage.redis.size | quote }}
+  {{- end }}
+{{- end }}
+
+---
+
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis-service
+  labels:
+    {{- include "redis.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.redis.external.port }}
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  {{- if .Values.service.redis.external.enabled }}
+  externalIPs:
+    {{- toYaml .Values.service.redis.external.externalIPs | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "redis.labels" . | nindent 4 }}
+{{- end }}
